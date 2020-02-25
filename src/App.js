@@ -1,108 +1,100 @@
 import React, { Fragment } from 'react';
-import * as firebase from 'firebase';
-
-var firebaseConfig = {
-  apiKey: "AIzaSyAwWe8_MCe9TSZ40mCGK4SEPFnEcKXqQuQ",
-  authDomain: "expert-e3a1c.firebaseapp.com",
-  databaseURL: "https://expert-e3a1c.firebaseio.com",
-  projectId: "expert-e3a1c",
-  storageBucket: "expert-e3a1c.appspot.com",
-  messagingSenderId: "198620453854",
-  appId: "1:198620453854:web:b08ae07a9977c4f58a9b4f",
-  measurementId: "G-THPPQSRN6P"
-};
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-firebase.analytics();
-
-const firestore = firebase.firestore();
-
-const users = firestore.collection('users')
-
-console.log();
+import { auth, users } from './config/firebase';
 
 class App extends React.Component {
   constructor() {
     super();
 
-    this.signIn = this.signIn.bind(this);
-    this.signUp = this.signUp.bind(this);
-    this.signOut = this.signOut.bind(this);
-    this.authListener = this.authListener.bind(this);
-    this.getCurrentUser = this.getCurrentUser.bind(this);
-
     this.state = {
       'email': '',
       'password': '',
       'user': null,
-      'currentUser': null
+      'userData': null
     }
   }
 
+  setUserDataToState = (user) => {
+    users.get().then(snap => snap.forEach(doc => {
+      (user && user.email === doc.data().email) &&
+        this.setState({ 
+          'user': user,
+          'userData': doc.data()
+        })
+    }));
+  }
+
   authListener = () => {
-    firebase.auth().onAuthStateChanged(user => {
-      this.setState({ 'user': (user) ? user : null })
-    })
+    auth.onAuthStateChanged(user => this.setUserDataToState(user))
   }
 
   signIn = (e) => {
     e.preventDefault()
 
-    firebase.auth().signInWithEmailAndPassword(this.state.email, this.state.password)
-      .then(user => console.log("You're logged in!"))
+    auth.signInWithEmailAndPassword(this.state.email, this.state.password)
+      .then(user => this.setUserDataToState(user))
       .catch(error => console.log(`Error: ${error.message}`))
   }
+
   signUp = (e) => {
     e.preventDefault()
 
-    firebase.auth().createUserWithEmailAndPassword(this.state.email, this.state.password)
+    auth.createUserWithEmailAndPassword(this.state.email, this.state.password)
       .then(user => {
         users.add({
           id: user.user.uid,
           email: user.user.email
         })
-          .then(ref => console.log(ref.id))
+          .then(ref => {
+            this.setState({
+              userData: {              
+                id: user.user.uid,
+                email: user.user.email
+              }
+            })
+          })
           .catch(error => console.log(error.message))
         console.log("You're logged in!");
       })
       .catch(error => console.log(`Error: ${error.message}`)) 
   }
+
   signOut = (e) => {
     e.preventDefault();
 
-    firebase.auth().signOut()
-      .then(user => console.log("You're logged out!"))
+    auth.signOut()
+      .then(user => {
+        console.log("You're logged out!")
+        this.setState({
+          ...this.state,
+          user: null,
+          userData: null
+        })
+      })
       .catch(error => console.log(`Error: ${error.message}`))
-  }
-
-  getCurrentUser = () => {
-    users.get().then(snap => snap.forEach(doc => {
-      this.setState({
-        currentUser: (this.state.user.uid === doc.data().id) && {
-          docID: doc.id,
-          ...doc.data()
-        }
-      });
-    }));
   }
 
   updateUserData = (e) => {
     e.preventDefault();
+        
+    users.get().then(snap => snap.forEach(doc => {
+      (this.state.userData.email === doc.data().email) &&
+      users.doc(doc.id).update({
+        ...this.state.userData
+      }).then(user => console.log('The data was updated'));
+    }));
+  }
 
-    const newData = {
-      ...this.state.currentUser
-    };
-
-    delete newData.docID;
-    
-    users.doc(this.state.currentUser.docID).update({
-      ...newData
-    }).then(user => console.log('The data was updated'));
+  updateUserStateData = e => {
+    this.setState({ 
+      userData: {
+        ...this.state.userData,
+        [e.target.name]: e.target.value
+      }
+    })
   }
 
   componentDidMount() {
     this.authListener();
-    this.getCurrentUser();
   }
 
   render() {
@@ -138,13 +130,29 @@ class App extends React.Component {
             (this.state.user ? `You're logged in as ${this.state.user.email}` : `You're not logged in`)
           }
         </section>
-        {(this.state.currentUser !== null && this.state.currentUser !== false) &&
+        {(this.state.userData !== null && this.state.userData !== false) &&
           <form>
-            {`E-mail: ${this.state.currentUser.email}`}
-            <input type="text" name="age" onChange={e => this.setState({ currentUser: {
-              ...this.state.currentUser,
-              age: e.target.value
-            } })} />
+            <h2>User settings </h2>
+            <p>
+              <label>E-mail</label>
+              <input type="text" name="email" disabled value={this.state.userData.email} />
+            </p>
+            <p>
+              <label>Age</label>
+              <input 
+                type="text" 
+                name="age" 
+                onChange={this.updateUserStateData} 
+                value={(this.state.userData.age) ? this.state.userData.age : ''} />
+            </p>
+            <p>
+              <label>Grade</label>
+              <input 
+                type="text" 
+                name="grade" 
+                onChange={this.updateUserStateData} 
+                value={(this.state.userData.grade) ? this.state.userData.grade : ''} />
+            </p>
             <button onClick={this.updateUserData}>Update</button>
           </form>
         }
